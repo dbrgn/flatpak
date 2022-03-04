@@ -358,6 +358,13 @@ g_hash_table_steal_extended (GHashTable    *hash_table,
 }
 #endif
 
+#if !GLIB_CHECK_VERSION (2, 68, 0)
+guint g_string_replace (GString     *string,
+                        const gchar *find,
+                        const gchar *replace,
+                        guint        limit);
+#endif
+
 gboolean flatpak_g_ptr_array_contains_string (GPtrArray  *array,
                                               const char *str);
 
