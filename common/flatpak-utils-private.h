@@ -133,6 +133,7 @@ gboolean flatpak_extension_matches_reason (const char *extension_id,
 
 const char * flatpak_get_bwrap (void);
 
+char **flatpak_strv_sort_by_length (const char * const *strv);
 char **flatpak_strv_merge (char   **strv1,
                            char   **strv2);
 char **flatpak_subpaths_merge (char **subpaths1,

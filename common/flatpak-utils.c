@@ -7720,6 +7720,35 @@ flatpak_format_choices (const char **choices,
   g_print ("\n");
 }
 
+static gint
+string_length_compare_func (gconstpointer a,
+                            gconstpointer b)
+{
+  return strlen (*(char * const *) a) - strlen (*(char * const *) b);
+}
+
+/* Sort a string array by decreasing length */
+char **
+flatpak_strv_sort_by_length (const char * const *strv)
+{
+  GPtrArray *array;
+  int i;
+
+  if (strv == NULL)
+    return NULL;
+
+  /* Combine both */
+  array = g_ptr_array_new ();
+
+  for (i = 0; strv[i] != NULL; i++)
+    g_ptr_array_add (array, g_strdup (strv[i]));
+
+  g_ptr_array_sort (array, string_length_compare_func);
+
+  g_ptr_array_add (array, NULL);
+  return (char **) g_ptr_array_free (array, FALSE);
+}
+
 char **
 flatpak_strv_merge (char   **strv1,
                     char   **strv2)
@@ -9208,4 +9237,4 @@ g_string_replace (GString     *string,
   return n;
 }
 
-#endif /* GLIB_CHECK_VERSION (2, 28, 0) */
+#endif /* GLIB_CHECK_VERSION (2, 68, 0) */

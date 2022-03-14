@@ -8918,19 +8918,20 @@ rewrite_one_dynamic_launcher (const char *portal_desktop_dir,
 {
   g_autoptr(GKeyFile) old_key_file = NULL;
   g_autoptr(GKeyFile) new_key_file = NULL;
-  g_autoptr(GFile) desktop_file = NULL;
   g_autoptr(GFile) link_file = NULL;
   g_autoptr(GFile) new_link_file = NULL;
   g_autoptr(GString) data_string = NULL;
   g_autoptr(GError) local_error = NULL;
   g_autofree char *old_data = NULL;
   g_autofree char *desktop_path = NULL;
+  g_autofree char *new_desktop_path = NULL;
   g_autofree char *icon_path = NULL;
   g_autofree char *relative_path = NULL;
   g_autofree char *new_desktop = NULL;
   const gchar *desktop_suffix;
 
   g_assert (g_str_has_suffix (desktop_name, ".desktop"));
+  g_assert (g_str_has_prefix (desktop_name, old_app_id));
 
   desktop_path = g_build_filename (portal_desktop_dir,
                                    desktop_name, NULL);
@@ -8963,19 +8964,15 @@ rewrite_one_dynamic_launcher (const char *portal_desktop_dir,
       g_warning ("Key file contents:\n%s\n", (const char *)data_string->str);
       return;
     }
-  if (!g_key_file_save_to_file (new_key_file, desktop_path, &local_error))
-    {
-      g_warning ("Couldn't rewrite desktop file %s: %s", desktop_path, local_error->message);
-      return;
-    }
 
-  /* Rename desktop file */
+  /* Write it out at the new path */
   desktop_suffix = desktop_name + strlen (old_app_id);
   new_desktop = g_strconcat (new_app_id, desktop_suffix, NULL);
-  desktop_file = g_file_new_for_path (desktop_path);
-  if (!g_file_set_display_name (desktop_file, new_desktop, NULL, &local_error))
+  new_desktop_path = g_build_filename (portal_desktop_dir, new_desktop, NULL);
+  if (!g_key_file_save_to_file (new_key_file, new_desktop_path, &local_error))
     {
-      g_warning ("Unable to rename desktop file %s -> %s: %s", desktop_name, new_desktop, local_error->message);
+      g_warning ("Couldn't rewrite desktop file from %s to %s: %s",
+                 desktop_path, new_desktop_path, local_error->message);
       return;
     }
 
@@ -8986,9 +8983,13 @@ rewrite_one_dynamic_launcher (const char *portal_desktop_dir,
   new_link_file = g_file_new_build_filename (g_get_user_data_dir (), "applications", new_desktop, NULL);
   if (!g_file_make_symbolic_link (new_link_file, relative_path, NULL, &local_error))
     {
-      g_warning ("Unable to rename desktop file link %s -> %s: %s", desktop_name, new_desktop, local_error->message);
+      g_warning ("Unable to rename desktop file link %s -> %s: %s",
+                 desktop_name, new_desktop, local_error->message);
       return;
     }
+
+  /* Delete the old desktop file */
+  unlink (desktop_path);
 
   /* And rename the icon */
   icon_path = g_key_file_get_string (old_key_file, G_KEY_FILE_DESKTOP_GROUP, "Icon", NULL);
@@ -9009,6 +9010,7 @@ rewrite_one_dynamic_launcher (const char *portal_desktop_dir,
             {
               g_warning ("Unable to rename icon file %s -> %s: %s", icon_basename, new_icon,
                          local_error->message);
+              g_clear_error (&local_error);
             }
         }
     }
@@ -9062,6 +9064,11 @@ rewrite_dynamic_launchers (FlatpakDecomposed   *ref,
   else
     {
       g_autoptr(GFileInfo) child_info = NULL;
+      g_auto(GStrv) previous_ids_sorted = NULL;
+
+      /* Sort by decreasing length so we get the longest prefix below */
+      previous_ids_sorted = flatpak_strv_sort_by_length (previous_ids);
+
       while ((child_info = g_file_enumerator_next_file (dir_enum, NULL, &local_error)) != NULL)
         {
           const char *desktop_name;
@@ -9071,13 +9078,13 @@ rewrite_dynamic_launchers (FlatpakDecomposed   *ref,
           if (!g_str_has_suffix (desktop_name, ".desktop"))
             continue;
 
-          for (i = 0; previous_ids[i] != NULL; i++)
+          for (i = 0; previous_ids_sorted[i] != NULL; i++)
             {
-              if (g_str_has_prefix (desktop_name, previous_ids[i]))
+              if (g_str_has_prefix (desktop_name, previous_ids_sorted[i]))
                 {
                   rewrite_one_dynamic_launcher (flatpak_file_get_path_cached (portal_desktop_dir),
                                                 portal_icon_path, desktop_name,
-                                                previous_ids[i], app_id);
+                                                previous_ids_sorted[i], app_id);
                   break;
                 }
             }
